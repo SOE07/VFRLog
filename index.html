@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>LogViz — Digitales Flugbuch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root{--bg:#060a14;--surface:#0c1424;--card:#111c32;--card-hover:#152242;--border:#1e2d4a;--text:#e2e8f0;--text2:#94a3b8;--text3:#475569;--accent:#3b82f6;--accent-rgb:59,130,246;--accent-press:#1d4ed8;--success:#10b981;--warning:#f59e0b;--danger:#ef4444;--claude:#d97706;--claude-rgb:217,119,6;--gemini:#3b82f6;--gemini-rgb:59,130,246;--mono:'JetBrains Mono','Fira Code',monospace;--sans:'Outfit',system-ui,sans-serif;--radius:14px;--radius-sm:8px}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+input,textarea,select{background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-family:var(--sans);font-size:14px;outline:none;transition:border-color .2s;width:100%;-webkit-appearance:none;appearance:none}
+input:focus,textarea:focus,select:focus{border-color:var(--accent)}
+button{font-family:var(--sans);cursor:pointer;border:none;outline:none}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes scaleIn{from{opacity:0;transform:scale(.93)}to{opacity:1;transform:scale(1)}}
+@keyframes pulse{0%,100%{opacity:.6}50%{opacity:1}}
+@keyframes dotPulse{0%,80%,100%{transform:scale(0)}40%{transform:scale(1)}}
+.fade-up{animation:fadeUp .35s cubic-bezier(.22,1,.36,1) both}
+.scale-in{animation:scaleIn .25s cubic-bezier(.22,1,.36,1) both}
+#app{height:100%;display:flex;flex-direction:column;overflow:hidden;max-width:520px;margin:0 auto;position:relative}
+.header{padding:16px 20px 12px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;border-bottom:1px solid var(--border)}
+.header h1{font-size:22px;font-weight:700;letter-spacing:-.5px}
+.header .sub{font-size:11px;color:var(--text3);font-family:var(--mono);letter-spacing:1.5px;margin-top:2px}
+.tab-content{flex:1;overflow:auto}
+.bottom-nav{display:flex;border-top:1px solid var(--border);background:var(--bg);flex-shrink:0;padding-bottom:env(safe-area-inset-bottom,0)}
+.nav-tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 0 8px;background:none;color:var(--text3);transition:color .2s;position:relative}
+.nav-tab.active{color:var(--accent)}.nav-tab.active::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:24px;height:2px;background:var(--accent);border-radius:1px}
+.nav-tab span{font-size:9px;font-weight:600;font-family:var(--mono);letter-spacing:.8px}
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;font-family:var(--mono);letter-spacing:.3px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:10px 18px;border-radius:var(--radius-sm);font-size:14px;font-weight:600;color:#fff;white-space:nowrap;transition:all .15s}
+.btn:active{transform:scale(.97)}.btn-primary{background:var(--accent);box-shadow:0 4px 16px rgba(var(--accent-rgb),.3)}.btn-primary:active{background:var(--accent-press)}
+.btn-success{background:var(--success)}.btn-danger{background:var(--danger)}.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text2)}.btn:disabled{opacity:.4;pointer-events:none}
+.card{background:var(--card);border-radius:var(--radius);padding:16px;border:1px solid var(--border);margin-bottom:10px;transition:background .15s}.card:hover{background:var(--card-hover)}
+.flight-route{display:flex;align-items:center;gap:8px}.flight-route .icao{font-size:18px;font-weight:700;font-family:var(--mono);letter-spacing:1px;text-align:center}
+.flight-route .time{font-size:10px;color:var(--text3);text-align:center}.flight-route .line{flex:1;height:1px;background:linear-gradient(90deg,var(--accent),var(--text3));position:relative}
+.stat-card .value{font-size:26px;font-weight:800;font-family:var(--mono);letter-spacing:-1px;margin-top:6px}.stat-card .unit{font-size:11px;color:var(--text3);margin-top:2px}
+.chat-msg{max-width:85%;padding:12px 16px;border-radius:var(--radius);font-size:14px;line-height:1.6;white-space:pre-wrap;word-break:break-word}
+.chat-msg.user{background:var(--accent);margin-left:auto}.chat-msg.ai{background:var(--card);border:1px solid var(--border)}
+.chat-dots{display:flex;gap:5px;padding:12px 16px;background:var(--card);border-radius:var(--radius);border:1px solid var(--border);width:fit-content}
+.chat-dots div{width:7px;height:7px;border-radius:50%;background:var(--accent);animation:dotPulse 1.4s infinite both}.chat-dots div:nth-child(2){animation-delay:.16s}.chat-dots div:nth-child(3){animation-delay:.32s}
+.suggestion-chip{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:7px 14px;color:var(--text2);font-size:12px;font-family:var(--sans);cursor:pointer;transition:all .15s}
+.suggestion-chip:hover{border-color:var(--accent);color:var(--accent)}
+.modal-overlay{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.72);display:flex;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px)}
+.modal{background:var(--bg);border-radius:var(--radius) var(--radius) 0 0;width:100%;max-width:520px;max-height:92vh;overflow:auto;padding:20px;border:1px solid var(--border);border-bottom:none}
+.modal .field{margin-bottom:12px}.modal label{font-size:11px;color:var(--text3);font-family:var(--mono);letter-spacing:.5px;display:block;margin-bottom:4px}
+.modal .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.modal .checkbox{display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px;font-weight:500}
+.modal .checkbox .box{width:20px;height:20px;border-radius:4px;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0}
+.modal .checkbox .box.checked{background:var(--accent);border-color:var(--accent)}
+.onboard-overlay{position:fixed;inset:0;z-index:200;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;text-align:center;overflow:auto}
+.onboard-logo{width:80px;height:80px;border-radius:20px;background:var(--accent);display:flex;align-items:center;justify-content:center;margin-bottom:24px;box-shadow:0 12px 40px rgba(var(--accent-rgb),.35)}
+.onboard-title{font-size:32px;font-weight:800;letter-spacing:-1px;margin-bottom:4px}
+.onboard-sub{font-size:14px;color:var(--text3);font-family:var(--mono);letter-spacing:2px;margin-bottom:28px}
+.onboard-hint{font-size:13px;color:var(--text2);line-height:1.5;max-width:380px;margin-bottom:20px}.onboard-hint a{color:var(--accent);text-decoration:none}
+.provider-toggle{display:flex;border-radius:var(--radius-sm);overflow:hidden;border:1px solid var(--border);width:100%;max-width:380px;margin-bottom:16px}
+.provider-toggle button{flex:1;padding:12px 8px;background:var(--surface);color:var(--text3);font-size:14px;font-weight:600;border:none;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px}
+.provider-toggle button.active-gemini{background:rgba(var(--gemini-rgb),.15);color:var(--gemini)}
+.provider-toggle button.active-claude{background:rgba(var(--claude-rgb),.15);color:var(--claude)}
+.mini-bar{height:4px;background:var(--surface);border-radius:2px;overflow:hidden}.mini-bar-fill{height:100%;border-radius:2px;transition:width .6s ease}
+#lmap{height:340px;border-radius:var(--radius);border:1px solid var(--border);z-index:1}
+.leaflet-container{background:var(--surface)!important}
+.leaflet-control-zoom a{background:var(--card)!important;color:var(--text)!important;border-color:var(--border)!important}
+.leaflet-popup-content-wrapper{background:var(--card)!important;color:var(--text)!important;border-radius:var(--radius-sm)!important;box-shadow:0 4px 20px rgba(0,0,0,.5)!important}
+.leaflet-popup-tip{background:var(--card)!important}
+.leaflet-popup-content{font-family:var(--mono)!important;font-size:12px!important;margin:8px 12px!important}
+.map-legend{display:flex;gap:12px;padding:10px 0;font-size:11px;color:var(--text2);font-family:var(--mono);flex-wrap:wrap}
+.map-legend .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:2px}
+@media(min-width:521px){#app{border-left:1px solid var(--border);border-right:1px solid var(--border)}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const PROVIDERS={gemini:{name:'Google Gemini',model:'gemini-2.5-flash-lite',placeholder:'AIza...',color:'var(--gemini)',link:'https://aistudio.google.com/apikey',linkLabel:'aistudio.google.com/apikey'},claude:{name:'Anthropic Claude',model:'claude-sonnet-4-20250514',placeholder:'sk-ant-...',color:'var(--claude)',link:'https://console.anthropic.com/settings/keys',linkLabel:'console.anthropic.com'}};
+const LS={flights:'lv_flights',key:'lv_key',provider:'lv_provider',onboard:'lv_onboard',aircraft:'lv_aircraft',homebase:'lv_homebase'};
+const AP=[
+// ── Internationale Verkehrsflughäfen (EDD) ──
+{icao:'EDDB',name:'Berlin BER',lat:52.366,lng:13.503},{icao:'EDDC',name:'Dresden',lat:51.133,lng:13.767},
+{icao:'EDDE',name:'Erfurt-Weimar',lat:50.980,lng:10.958},{icao:'EDDF',name:'Frankfurt/Main',lat:50.033,lng:8.570},
+{icao:'EDDG',name:'Münster/Osnabrück',lat:52.135,lng:7.685},{icao:'EDDH',name:'Hamburg',lat:53.630,lng:9.988},
+{icao:'EDDK',name:'Köln/Bonn',lat:50.866,lng:7.143},{icao:'EDDL',name:'Düsseldorf',lat:51.289,lng:6.767},
+{icao:'EDDM',name:'München',lat:48.354,lng:11.786},{icao:'EDDN',name:'Nürnberg',lat:49.499,lng:11.078},
+{icao:'EDDP',name:'Leipzig/Halle',lat:51.424,lng:12.236},{icao:'EDDR',name:'Saarbrücken',lat:49.215,lng:7.110},
+{icao:'EDDS',name:'Stuttgart',lat:48.690,lng:9.222},{icao:'EDDV',name:'Hannover',lat:52.461,lng:9.685},
+{icao:'EDDW',name:'Bremen',lat:53.047,lng:8.787},
+// ── Regionalflughäfen ──
+{icao:'EDAH',name:'Heringsdorf',lat:53.879,lng:14.152},{icao:'EDBH',name:'Barth/Stralsund',lat:54.338,lng:12.710},
+{icao:'EDBN',name:'Neubrandenburg',lat:53.602,lng:13.306},{icao:'EDFH',name:'Frankfurt-Hahn',lat:49.943,lng:7.264},
+{icao:'EDFM',name:'Mannheim City',lat:49.473,lng:8.514},{icao:'EDGS',name:'Siegerland',lat:50.707,lng:8.083},
+{icao:'EDHI',name:'Hamburg-Finkenwerder',lat:53.535,lng:9.835},{icao:'EDHK',name:'Kiel-Holtenau',lat:54.379,lng:10.145},
+{icao:'EDHL',name:'Lübeck',lat:53.805,lng:10.719},{icao:'EDJA',name:'Memmingen/Allgäu',lat:47.988,lng:10.240},
+{icao:'EDLV',name:'Weeze/Niederrhein',lat:51.602,lng:6.142},{icao:'EDLW',name:'Dortmund',lat:51.518,lng:7.612},
+{icao:'EDNY',name:'Friedrichshafen',lat:47.671,lng:9.511},{icao:'EDOP',name:'Parchim',lat:53.427,lng:11.783},
+{icao:'EDSB',name:'Karlsruhe/Baden-Baden',lat:48.779,lng:8.080},{icao:'EDVK',name:'Kassel',lat:51.408,lng:9.377},
+// ── Sonderlandeplätze & GA (ED*) ──
+{icao:'EDAC',name:'Altenburg-Nobitz',lat:50.982,lng:12.506},{icao:'EDAX',name:'Rechlin-Lärz',lat:53.306,lng:12.752},
+{icao:'EDBC',name:'Cochstedt',lat:51.856,lng:11.420},{icao:'EDBM',name:'Magdeburg',lat:52.074,lng:11.627},
+{icao:'EDKA',name:'Aachen-Merzbrück',lat:50.823,lng:6.186},{icao:'EDKB',name:'Hangelar',lat:50.769,lng:7.163},
+{icao:'EDKL',name:'Leverkusen',lat:51.015,lng:7.006},{icao:'EDKV',name:'Dahlemer Binz',lat:50.406,lng:6.529},
+{icao:'EDLA',name:'Arnsberg-Menden',lat:51.484,lng:7.898},{icao:'EDLE',name:'Essen/Mülheim',lat:51.402,lng:6.938},
+{icao:'EDLI',name:'Bielefeld-Windelsbleiche',lat:51.965,lng:8.544},{icao:'EDLN',name:'Mönchengladbach',lat:51.230,lng:6.505},
+{icao:'EDLO',name:'Oerlinghausen',lat:51.943,lng:8.670},{icao:'EDLP',name:'Paderborn-Lippstadt',lat:51.614,lng:8.616},
+{icao:'EDLS',name:'Stadtlohn-Vreden',lat:52.091,lng:6.840},{icao:'EDLZ',name:'Soest-Bad Sassendorf',lat:51.578,lng:8.215},
+{icao:'EDMA',name:'Augsburg',lat:48.426,lng:10.932},{icao:'EDME',name:'Eggenfelden',lat:48.396,lng:12.724},
+{icao:'EDML',name:'Landshut-Ellermühle',lat:48.512,lng:12.034},{icao:'EDMO',name:'Oberpfaffenhofen',lat:48.081,lng:11.283},
+{icao:'EDMS',name:'Straubing-Wallmühle',lat:48.901,lng:12.517},{icao:'EDMT',name:'Tannheim',lat:48.010,lng:10.099},
+{icao:'EDNA',name:'Aalen-Heidenheim',lat:48.783,lng:10.265},{icao:'EDNL',name:'Leutkirch-Unterzeil',lat:47.859,lng:10.014},
+{icao:'EDPA',name:'Aalen-Elchingen',lat:48.779,lng:10.265},{icao:'EDPB',name:'Bad Dürkheim',lat:49.473,lng:8.196},
+{icao:'EDQA',name:'Bamberg-Breitenau',lat:49.920,lng:10.914},{icao:'EDQD',name:'Bayreuth',lat:49.985,lng:11.640},
+{icao:'EDQF',name:'Ansbach-Petersdorf',lat:49.361,lng:10.669},{icao:'EDQG',name:'Giebelstadt',lat:49.649,lng:9.966},
+{icao:'EDQM',name:'Hof-Plauen',lat:50.289,lng:11.857},{icao:'EDQT',name:'Haßfurt-Schweinfurt',lat:50.018,lng:10.529},
+{icao:'EDRA',name:'Bad Neuenahr',lat:50.558,lng:7.133},{icao:'EDRB',name:'Bitburg',lat:49.945,lng:6.565},
+{icao:'EDRF',name:'Fränkisch-Crumbach',lat:49.748,lng:8.820},{icao:'EDRH',name:'Hoppstädten',lat:49.621,lng:7.177},
+{icao:'EDRN',name:'Nannhausen',lat:49.970,lng:7.475},{icao:'EDRT',name:'Trier-Föhren',lat:49.862,lng:6.788},
+{icao:'EDRZ',name:'Zweibrücken',lat:49.209,lng:7.401},
+{icao:'EDSA',name:'Donaueschingen-Villingen',lat:47.973,lng:8.522},{icao:'EDSG',name:'Rheinstetten-Forchheim',lat:48.977,lng:8.350},
+{icao:'EDST',name:'Hahnweide',lat:48.714,lng:9.413},{icao:'EDTD',name:'Dingolfing',lat:48.607,lng:12.490},
+{icao:'EDTF',name:'Freiburg',lat:48.023,lng:7.832},{icao:'EDTL',name:'Lahr',lat:48.369,lng:7.828},
+{icao:'EDTQ',name:'Pattonville',lat:48.854,lng:9.170},{icao:'EDTY',name:'Schwäbisch Hall',lat:49.118,lng:9.784},
+{icao:'EDUW',name:'Pasewalk',lat:53.520,lng:14.012},{icao:'EDVA',name:'Bad Gandersheim',lat:51.862,lng:10.016},
+{icao:'EDVE',name:'Braunschweig-Wolfsburg',lat:52.319,lng:10.558},{icao:'EDVK',name:'Kassel-Calden',lat:51.408,lng:9.384},
+{icao:'EDWE',name:'Emden',lat:53.391,lng:7.227},{icao:'EDWG',name:'Wangerooge',lat:53.743,lng:7.914},
+{icao:'EDWI',name:'Wilhelmshaven',lat:53.503,lng:8.053},{icao:'EDWJ',name:'Juist',lat:53.681,lng:7.056},
+{icao:'EDWR',name:'Borkum',lat:53.596,lng:6.709},{icao:'EDWS',name:'Norden-Norddeich',lat:53.633,lng:7.191},
+{icao:'EDWY',name:'Norderney',lat:53.707,lng:7.230},{icao:'EDWU',name:'Varrelbusch',lat:52.908,lng:8.043},
+{icao:'EDXA',name:'Achmer/Bramsche',lat:52.378,lng:7.914},{icao:'EDXB',name:'Heide-Büsum',lat:54.153,lng:9.097},
+{icao:'EDXF',name:'Flensburg-Schäferhaus',lat:54.774,lng:9.379},{icao:'EDXH',name:'Helgoland-Düne',lat:54.185,lng:7.916},
+{icao:'EDXO',name:'St.Peter-Ording',lat:54.311,lng:8.687},{icao:'EDXW',name:'Sylt/Westerland',lat:54.913,lng:8.341},
+// ── Hessen Sonderlandeplätze ──
+{icao:'EDFE',name:'Egelsbach',lat:49.960,lng:8.645},{icao:'EDFN',name:'Marburg-Schönstadt',lat:50.854,lng:8.815},
+{icao:'EDFQ',name:'Allendorf/Eder',lat:51.033,lng:8.681},{icao:'EDFR',name:'Rotenburg a.d.Fulda',lat:50.986,lng:9.749},
+{icao:'EDFT',name:'Lauterbach-Wernges',lat:50.649,lng:9.407},{icao:'EDFU',name:'Gießen-Lützellinden',lat:50.574,lng:8.583},
+{icao:'EDFV',name:'Worms',lat:49.607,lng:8.369},{icao:'EDFZ',name:'Mainz-Finthen',lat:49.968,lng:8.147},
+{icao:'EDFK',name:'Bad Kissingen',lat:50.197,lng:10.085},{icao:'EDFC',name:'Aschaffenburg',lat:49.939,lng:9.064},
+// ── Nachbarländer ──
+{icao:'LOWW',name:'Wien',lat:48.110,lng:16.570},{icao:'LOWG',name:'Graz',lat:46.991,lng:15.440},
+{icao:'LOWS',name:'Salzburg',lat:47.793,lng:13.004},{icao:'LOWL',name:'Linz',lat:48.233,lng:14.188},
+{icao:'LOWI',name:'Innsbruck',lat:47.260,lng:11.344},{icao:'LOWK',name:'Klagenfurt',lat:46.643,lng:14.338},
+{icao:'LSZH',name:'Zürich',lat:47.465,lng:8.549},{icao:'LSZB',name:'Bern',lat:46.912,lng:7.497},
+{icao:'LSGG',name:'Genf',lat:46.238,lng:6.109},{icao:'LSZR',name:'St. Gallen-Altenrhein',lat:47.485,lng:9.561},
+{icao:'EHAM',name:'Amsterdam Schiphol',lat:52.309,lng:4.764},{icao:'EHRD',name:'Rotterdam',lat:51.957,lng:4.438},
+{icao:'EHBK',name:'Maastricht',lat:50.912,lng:5.770},{icao:'EHEH',name:'Eindhoven',lat:51.450,lng:5.375},
+{icao:'ELLX',name:'Luxemburg',lat:49.633,lng:6.204},
+{icao:'LFST',name:'Strasbourg',lat:48.538,lng:7.628},{icao:'LFML',name:'Marseille',lat:43.437,lng:5.215},
+{icao:'LFMN',name:'Nizza',lat:43.658,lng:7.216},{icao:'LFPG',name:'Paris CDG',lat:49.010,lng:2.548},
+{icao:'LIMC',name:'Mailand Malpensa',lat:45.630,lng:8.723},{icao:'LIPZ',name:'Venedig',lat:45.505,lng:12.352},
+{icao:'LKPR',name:'Prag',lat:50.101,lng:14.260},{icao:'EPWA',name:'Warschau',lat:52.166,lng:20.967},
+{icao:'EKCH',name:'Kopenhagen',lat:55.618,lng:12.656},{icao:'EBBR',name:'Brüssel',lat:50.902,lng:4.484},
+{icao:'EGLL',name:'London Heathrow',lat:51.470,lng:-0.461},{icao:'LEMD',name:'Madrid',lat:40.472,lng:-3.561},
+{icao:'LEBL',name:'Barcelona',lat:41.297,lng:2.078},{icao:'LGAV',name:'Athen',lat:37.936,lng:23.944},
+{icao:'LTFM',name:'Istanbul',lat:41.275,lng:28.752},{icao:'LIRF',name:'Rom Fiumicino',lat:41.800,lng:12.239},
+{icao:'LPPT',name:'Lissabon',lat:38.781,lng:-9.136},{icao:'ENGM',name:'Oslo',lat:60.194,lng:11.100},
+{icao:'ESSA',name:'Stockholm Arlanda',lat:59.652,lng:17.919},
+];
+let S={tab:'log',flights:[],apiKey:'',provider:'gemini',onboarded:false,editing:null,search:'',chatMessages:[],chatInput:'',chatLoading:false,showKey:false,keyInput:'',aircraft:[],homebase:'EDDF',editAC:null};
+let leafletMap=null;
+
+function wMsg(){return{role:'ai',text:`Hallo! Ich bin dein KI-Flugassistent (${PROVIDERS[S.provider].name}). Frag mich alles über dein Flugbuch ✈️`};}
+const $=s=>document.querySelector(s);
+const h=(t,a,...c)=>{const e=document.createElement(t);if(a)Object.entries(a).forEach(([k,v])=>{if(k==='style'&&typeof v==='object')Object.assign(e.style,v);else if(k.startsWith('on'))e.addEventListener(k.slice(2).toLowerCase(),v);else if(k==='className')e.className=v;else if(k==='innerHTML')e.innerHTML=v;else e.setAttribute(k,v)});c.flat(9).forEach(x=>{if(x!=null)e.append(typeof x==='string'?document.createTextNode(x):x)});return e};
+const svg=(p,sz=20,c='currentColor',sw=1.8)=>`<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${p.map(d=>`<path d="${d}"/>`).join('')}</svg>`;
+const I={plane:['M21 16v-2l-8-5V3.5A1.5 1.5 0 0011.5 2 1.5 1.5 0 0010 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z'],plus:['M12 5v14','M5 12h14'],list:['M8 6h13','M8 12h13','M8 18h13','M3 6h.01','M3 12h.01','M3 18h.01'],stats:['M18 20V10','M12 20V4','M6 20v-6'],ai:['M12 2L2 7l10 5 10-5-10-5z','M2 17l10 5 10-5','M2 12l10 5 10-5'],settings:['M12.22 2h-.44a2 2 0 00-2 2v.18a2 2 0 01-1 1.73l-.43.25a2 2 0 01-2 0l-.15-.08a2 2 0 00-2.73.73l-.22.38a2 2 0 00.73 2.73l.15.1a2 2 0 011 1.72v.51a2 2 0 01-1 1.74l-.15.09a2 2 0 00-.73 2.73l.22.38a2 2 0 002.73.73l.15-.08a2 2 0 012 0l.43.25a2 2 0 011 1.73V20a2 2 0 002 2h.44a2 2 0 002-2v-.18a2 2 0 011-1.73l.43-.25a2 2 0 012 0l.15.08a2 2 0 002.73-.73l.22-.39a2 2 0 00-.73-2.73l-.15-.08a2 2 0 01-1-1.74v-.5a2 2 0 011-1.74l.15-.09a2 2 0 00.73-2.73l-.22-.38a2 2 0 00-2.73-.73l-.15.08a2 2 0 01-2 0l-.43-.25a2 2 0 01-1-1.73V4a2 2 0 00-2-2z','M12 15a3 3 0 100-6 3 3 0 000 6z'],search:['M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z'],clock:['M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z','M12 6v6l4 2'],map:['M1 6v16l7-4 8 4 7-4V2l-7 4-8-4z'],globe:['M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z','M2 12h20'],sun:['M12 17a5 5 0 100-10 5 5 0 000 10z','M12 1v2','M12 21v2','M4.22 4.22l1.42 1.42','M18.36 18.36l1.42 1.42','M1 12h2','M21 12h2','M4.22 19.78l1.42-1.42','M18.36 5.64l1.42-1.42'],cloud:['M18 10h-1.26A8 8 0 109 20h9a5 5 0 000-10z'],key:['M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4'],check:['M20 6L9 17l-5-5'],x:['M18 6L6 18','M6 6l12 12'],trash:['M3 6h18','M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2'],exp:['M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4','M7 10l5 5 5-5','M12 15V3'],upload:['M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4','M17 8l-5-5-5 5','M12 3v12'],info:['M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z','M12 16v-4','M12 8h.01'],send:['M22 2L11 13','M22 2l-7 20-4-9-9-4z'],home:['M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z','M9 22V12h6v10'],edit:['M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7','M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z']};
+const ic=(n,sz,c,sw)=>svg(I[n]||[],sz,c,sw);
+const fmtDur=m=>`${Math.floor(m/60)}:${String(m%60).padStart(2,'0')}`;
+const fmtDate=iso=>new Date(iso).toLocaleDateString('de-DE',{day:'2-digit',month:'short',year:'numeric'});
+const totalMin=a=>a.reduce((s,f)=>s+f.durationMin,0);
+const uid=()=>'fl-'+Date.now()+'-'+Math.random().toString(36).slice(2,6);
+const apByIcao=c=>AP.find(a=>a.icao===c)||{icao:c,name:c,lat:50,lng:10};
+
+/* Persistence */
+const lsG=(k,d)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}};
+const lsS=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+function load(){S.flights=lsG(LS.flights,[]);S.apiKey=localStorage.getItem(LS.key)||'';S.provider=localStorage.getItem(LS.provider)||'gemini';S.keyInput=S.apiKey;S.onboarded=localStorage.getItem(LS.onboard)==='1';S.aircraft=lsG(LS.aircraft,[{type:'C172',reg:'D-EABC'},{type:'PA28',reg:'D-EXYZ'},{type:'DA40',reg:'D-EFLY'}]);S.homebase=localStorage.getItem(LS.homebase)||'EDDF';S.chatMessages=[wMsg()];}
+function saveF(){lsS(LS.flights,S.flights)}function saveAC(){lsS(LS.aircraft,S.aircraft)}function saveK(k){S.apiKey=k;localStorage.setItem(LS.key,k)}function saveProv(p){S.provider=p;localStorage.setItem(LS.provider,p)}function saveHB(h){S.homebase=h;localStorage.setItem(LS.homebase,h)}function finOB(){S.onboarded=true;localStorage.setItem(LS.onboard,'1')}
+
+function genSamples(){const f=[];for(let i=0;i<10;i++){const dep=AP[Math.floor(Math.random()*AP.length)];let arr=dep;while(arr.icao===dep.icao)arr=AP[Math.floor(Math.random()*AP.length)];const d=new Date(Date.now()-i*86400000*(2+Math.random()*5));const hh=8+Math.floor(Math.random()*10),mm=Math.floor(Math.random()*60),dur=30+Math.floor(Math.random()*180),am=(hh*60+mm+dur)%(24*60);const ac=S.aircraft[Math.floor(Math.random()*S.aircraft.length)]||{type:'C172',reg:'D-EABC'};f.push({id:uid(),date:d.toISOString().slice(0,10),aircraft:ac.type,registration:ac.reg,departure:dep,arrival:arr,blockOff:`${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`,blockOn:`${String(Math.floor(am/60)).padStart(2,'0')}:${String(am%60).padStart(2,'0')}`,durationMin:dur,landings:1+Math.floor(Math.random()*3),pic:Math.random()>.3,night:Math.random()>.7,ifr:Math.random()>.6,remarks:''});}return f.sort((a,b)=>b.date.localeCompare(a.date));}
+
+function provToggle(sel,cb){const w=h('div',{className:'provider-toggle'});['gemini','claude'].forEach(p=>{const a=sel===p;const b=h('button',{className:a?(p==='gemini'?'active-gemini':'active-claude'):'',onClick:()=>cb(p)});b.innerHTML=`<span style="font-size:18px">${p==='gemini'?'✦':'◈'}</span>${p==='gemini'?'Gemini':'Claude'}`;w.append(b)});return w;}
+
+/* ═══ LEAFLET MAP ═══ */
+function initMap(containerId){
+  if(leafletMap){leafletMap.remove();leafletMap=null;}
+  const pts={};S.flights.forEach(f=>{[f.departure,f.arrival].forEach(a=>{if(!pts[a.icao])pts[a.icao]={...a,count:0};pts[a.icao].count++;});});
+  const all=Object.values(pts);if(!all.length)return;
+
+  const hb=apByIcao(S.homebase);
+  leafletMap=L.map(containerId,{zoomControl:true,attributionControl:false}).setView([hb.lat,hb.lng],6);
+
+  // Dark tile layer (CartoDB Dark Matter)
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+    maxZoom:18,subdomains:'abcd'
+  }).addTo(leafletMap);
+
+  // Attribution (small)
+  L.control.attribution({prefix:false,position:'bottomright'}).addAttribution('© <a href="https://carto.com" style="color:#64748b">CARTO</a> · <a href="https://osm.org" style="color:#64748b">OSM</a>').addTo(leafletMap);
+
+  // Routes
+  const routes=new Set();
+  S.flights.forEach(f=>{
+    const k=[f.departure.icao,f.arrival.icao].sort().join('-');
+    if(!routes.has(k)){routes.add(k);
+      L.polyline([[f.departure.lat,f.departure.lng],[f.arrival.lat,f.arrival.lng]],{color:'#3b82f6',weight:1.5,opacity:.35,dashArray:'6 4'}).addTo(leafletMap);
+    }
+  });
+
+  // Airport markers
+  const maxC=Math.max(...all.map(a=>a.count),1);
+  all.forEach(a=>{
+    const isHome=a.icao===S.homebase;
+    const r=isHome?10:5+Math.min(6,(a.count/maxC)*6);
+    const col=isHome?'#f59e0b':'#3b82f6';
+    const marker=L.circleMarker([a.lat,a.lng],{
+      radius:r,fillColor:col,color:isHome?'#fbbf24':'#60a5fa',weight:isHome?2:1,
+      opacity:isHome?1:.7,fillOpacity:isHome?.9:.7
+    }).addTo(leafletMap);
+
+    const flightsHere=S.flights.filter(f=>f.departure.icao===a.icao||f.arrival.icao===a.icao);
+    const timeHere=totalMin(flightsHere);
+    marker.bindPopup(`<div style="font-size:14px;font-weight:700;margin-bottom:4px">${a.icao}</div><div style="color:#94a3b8;margin-bottom:6px">${a.name}</div><div>${a.count}× angeflogen · ${fmtDur(timeHere)}h</div>${isHome?'<div style="color:#f59e0b;margin-top:4px">★ Homebase</div>':''}`);
+
+    // ICAO label
+    if(r>=7||isHome){
+      L.marker([a.lat,a.lng],{icon:L.divIcon({className:'',html:`<div style="font-family:var(--mono);font-size:10px;font-weight:700;color:${isHome?'#fbbf24':'#93c5fd'};text-shadow:0 1px 3px rgba(0,0,0,.8);white-space:nowrap;transform:translate(-50%,-20px);text-align:center">${a.icao}</div>`,iconSize:[0,0]})}).addTo(leafletMap);
+    }
+  });
+
+  // Fit bounds
+  const bounds=L.latLngBounds(all.map(a=>[a.lat,a.lng]));
+  leafletMap.fitBounds(bounds,{padding:[30,30],maxZoom:8});
+}
+
+/* ═══ RENDER ═══ */
+function render(){
+  const app=$('#app');app.innerHTML='';leafletMap=null;
+  if(!S.onboarded){renderOB(app);return}
+  const content=h('div',{className:'tab-content'});
+  if(S.tab==='log')renderLog(content);else if(S.tab==='map')renderMapTab(content);else if(S.tab==='stats')renderStats(content);else if(S.tab==='ai')renderAI(content);else if(S.tab==='settings')renderCfg(content);
+  const prov=PROVIDERS[S.provider],pc=S.provider==='gemini'?'var(--gemini)':'var(--claude)';
+  const hdrs={log:'LogViz',map:'Streckenkarte',stats:'Statistik',ai:'KI Assistent',settings:'Einstellungen'};
+  const subs={log:'DIGITALES FLUGBUCH',map:'ANGEFLOGENE PLÄTZE',stats:'FLUGSTUNDEN',ai:prov.name.toUpperCase(),settings:'KONFIGURATION'};
+  const hdr=h('div',{className:'header'},h('div',{},h('h1',{},hdrs[S.tab]),h('div',{className:'sub'},subs[S.tab])));
+  if(S.tab==='log'){const b=h('button',{className:'btn btn-primary',style:{padding:'8px 14px',fontSize:'13px'},onClick:()=>{const ac=S.aircraft[0]||{type:'C172',reg:'D-E'};S.editing={id:uid(),date:new Date().toISOString().slice(0,10),aircraft:ac.type,registration:ac.reg,departure:apByIcao(S.homebase),arrival:AP[1],blockOff:'10:00',blockOn:'11:30',durationMin:90,landings:1,pic:true,night:false,ifr:false,remarks:''};render()}});b.innerHTML=ic('plus',15,'#fff')+' Neu';hdr.append(b)}
+  if(S.tab==='ai'){const d=h('div',{style:{display:'flex',alignItems:'center',gap:'6px'}});d.innerHTML=`<div style="width:8px;height:8px;border-radius:4px;background:${S.apiKey?pc:'var(--danger)'};${S.apiKey?'animation:pulse 2s infinite':''}"></div><span style="font-size:11px;font-family:var(--mono);color:var(--text3)">${S.apiKey?(S.provider==='gemini'?'GEMINI':'CLAUDE'):'KEIN KEY'}</span>`;hdr.append(d)}
+  app.append(hdr,content,renderNav());
+  if(S.editing)renderEditor(app);if(S.editAC!==null)renderACEd(app);
+  if(S.tab==='ai'){const sc=$('.chat-scroll');if(sc)sc.scrollTop=sc.scrollHeight}
+  if(S.tab==='map')setTimeout(()=>initMap('lmap'),50);
+}
+
+/* Onboard */
+function renderOB(app){const ov=h('div',{className:'onboard-overlay scale-in'});const logo=h('div',{className:'onboard-logo'});logo.innerHTML=ic('plane',36,'#fff',2);const toggle=provToggle(S.provider,p=>{S.provider=p;saveProv(p);renderOB($('#app'))});const prov=PROVIDERS[S.provider];const kw=h('div',{style:{width:'100%',maxWidth:'380px',marginBottom:'12px'}});const inp=h('input',{type:'text',placeholder:`${prov.name} Key (${prov.placeholder})`,style:{textAlign:'center',fontSize:'14px',padding:'14px 16px'}});inp.value=S.keyInput;inp.addEventListener('input',e=>{S.keyInput=e.target.value});kw.append(inp);const hint=h('div',{className:'onboard-hint'});hint.innerHTML=`Key erstellen: <a href="${prov.link}" target="_blank">${prov.linkLabel}</a>`;const go=h('button',{className:'btn btn-primary',style:{width:'100%',maxWidth:'380px',height:'52px',fontSize:'16px'},onClick:()=>{if(S.keyInput.trim())saveK(S.keyInput.trim());finOB();if(!S.flights.length){S.flights=genSamples();saveF()}S.chatMessages=[wMsg()];render()}});go.innerHTML=ic('plane',18,'#fff')+' Flugbuch starten';const skip=h('button',{className:'btn btn-ghost',style:{marginTop:'10px',width:'100%',maxWidth:'380px',fontSize:'13px',color:'var(--text3)'},onClick:()=>{finOB();if(!S.flights.length){S.flights=genSamples();saveF()}S.chatMessages=[wMsg()];render()}});skip.textContent='Ohne KI starten';ov.innerHTML='';ov.append(logo,h('div',{className:'onboard-title'},'LogViz'),h('div',{className:'onboard-sub'},'DIGITALES FLUGBUCH'),toggle,kw,hint,go,skip);app.innerHTML='';app.append(ov);}
+
+/* Nav */
+function renderNav(){const nav=h('div',{className:'bottom-nav'});[['log','list','LOG'],['map','map','KARTE'],['stats','stats','STATS'],['ai','ai','KI'],['settings','settings','CFG']].forEach(([id,i,l])=>{const b=h('button',{className:'nav-tab'+(S.tab===id?' active':''),onClick:()=>{S.tab=id;render()}});b.innerHTML=ic(i,19,S.tab===id?'var(--accent)':'var(--text3)')+`<span>${l}</span>`;nav.append(b)});return nav;}
+
+/* Log */
+function renderLog(p){const sw=h('div',{style:{padding:'10px 20px 4px',position:'relative'}});const si=h('input',{placeholder:'Suche ICAO, Muster, Datum...',value:S.search,style:{paddingLeft:'36px'}});si.addEventListener('input',e=>{S.search=e.target.value;renderFL()});sw.append(h('div',{innerHTML:ic('search',16,'var(--text3)'),style:{position:'absolute',left:'32px',top:'21px',pointerEvents:'none'}}),si);p.append(sw,h('div',{id:'fl-list',style:{padding:'10px 20px 20px'}}));renderFL();}
+function renderFL(){const w=$('#fl-list');if(!w)return;w.innerHTML='';const q=S.search.toLowerCase();const fl=S.flights.filter(f=>!q||f.departure.icao.toLowerCase().includes(q)||f.arrival.icao.toLowerCase().includes(q)||f.aircraft.toLowerCase().includes(q)||f.registration.toLowerCase().includes(q)||f.date.includes(q));if(!fl.length){w.innerHTML=`<div style="text-align:center;padding:40px;opacity:.5">${ic('plane',48,'var(--text3)',1)}<div style="font-size:16px;font-weight:600;color:var(--text2);margin-top:16px">Keine Flüge</div></div>`;return}fl.forEach((f,i)=>{const c=h('div',{className:'card fade-up',style:{cursor:'pointer',animationDelay:i*30+'ms'},onClick:()=>{S.editing={...f};render()}});const badges=[f.pic?'<span class="badge" style="background:#10b98120;color:var(--success)">PIC</span>':'',f.ifr?'<span class="badge" style="background:#f59e0b20;color:var(--warning)">IFR</span>':'',f.night?'<span class="badge" style="background:#a78bfa20;color:#a78bfa">NIGHT</span>':'',`<span class="badge" style="background:var(--surface);color:var(--text2)">${f.landings} LDG</span>`].filter(Boolean).join(' ');c.innerHTML=`<div style="display:flex;justify-content:space-between;margin-bottom:10px"><div><div style="font-size:11px;color:var(--text3);font-family:var(--mono)">${fmtDate(f.date)}</div><div style="display:flex;align-items:center;gap:6px;margin-top:3px"><span class="badge" style="background:rgba(var(--accent-rgb),.15);color:var(--accent)">${f.aircraft}</span><span style="font-size:12px;color:var(--text2);font-family:var(--mono)">${f.registration}</span></div></div><div style="text-align:right"><div style="font-size:20px;font-weight:700;font-family:var(--mono)">${fmtDur(f.durationMin)}</div><div style="font-size:10px;color:var(--text3)">BLOCK</div></div></div><div class="flight-route" style="margin-bottom:8px"><div><div class="icao">${f.departure.icao}</div><div class="time">${f.blockOff}</div></div><div class="line"></div><div><div class="icao">${f.arrival.icao}</div><div class="time">${f.blockOn}</div></div></div><div style="display:flex;gap:6px;flex-wrap:wrap">${badges}</div>`;w.append(c)});}
+
+/* Map Tab */
+function renderMapTab(p){
+  const w=h('div',{style:{padding:'20px'}});
+  if(!S.flights.length){w.innerHTML=`<div style="text-align:center;padding:40px;opacity:.5">${ic('map',48,'var(--text3)',1)}<div style="font-size:16px;font-weight:600;color:var(--text2);margin-top:16px">Keine Flüge</div></div>`;p.append(w);return}
+  // Map container
+  w.append(h('div',{id:'lmap'}));
+  // Legend
+  const pts={};S.flights.forEach(f=>{[f.departure,f.arrival].forEach(a=>{if(!pts[a.icao])pts[a.icao]={...a,count:0};pts[a.icao].count++})});
+  const routes=new Set();S.flights.forEach(f=>{routes.add([f.departure.icao,f.arrival.icao].sort().join('-'))});
+  const legend=h('div',{className:'map-legend'});
+  legend.innerHTML=`<div style="display:flex;align-items:center;gap:5px"><div class="dot" style="background:var(--accent)"></div>${Object.keys(pts).length} Plätze</div><div style="display:flex;align-items:center;gap:5px"><div class="dot" style="background:var(--warning)"></div>Homebase: ${S.homebase}</div><div style="display:flex;align-items:center;gap:5px"><div class="dot" style="background:var(--border)"></div>${routes.size} Routen</div>`;
+  w.append(legend);
+  // Airport list
+  const sorted=Object.values(pts).sort((a,b)=>b.count-a.count);
+  const lc=h('div',{className:'card fade-up',style:{cursor:'default',animationDelay:'200ms'}});
+  lc.innerHTML=`<div style="font-size:13px;font-weight:600;margin-bottom:10px;color:var(--text2)">${sorted.length} angeflogene Flugplätze</div>`;
+  sorted.forEach(a=>{const isH=a.icao===S.homebase;const row=h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 0',borderBottom:'1px solid var(--border)'}});row.innerHTML=`<div style="display:flex;align-items:center;gap:8px">${isH?ic('home',14,'var(--warning)'):'<div style="width:14px"></div>'}<span style="font-family:var(--mono);font-weight:600;font-size:13px">${a.icao}</span><span style="font-size:12px;color:var(--text3)">${a.name}</span></div><span class="badge" style="background:rgba(var(--accent-rgb),.1);color:var(--accent)">${a.count}×</span>`;lc.append(row)});
+  w.append(lc);p.append(w);
+}
+
+/* Stats */
+function renderStats(p){const fl=S.flights,tot=totalMin(fl),picF=fl.filter(f=>f.pic),ifrF=fl.filter(f=>f.ifr);const ldg=fl.reduce((s,f)=>s+f.landings,0),apts=[...new Set(fl.flatMap(f=>[f.departure.icao,f.arrival.icao]))];const acs={};fl.forEach(f=>{acs[f.aircraft]=(acs[f.aircraft]||0)+f.durationMin});const mx=Math.max(...Object.values(acs),1);const w=h('div',{style:{padding:'20px'}});const stats=[['GESAMTZEIT',fmtDur(tot),'Std:Min','clock','var(--accent)',0],['FLÜGE',fl.length,'','plane','var(--success)',50],['LANDUNGEN',ldg,'','globe','var(--warning)',100],['FLUGHÄFEN',apts.length,'','map','#a78bfa',150],['PIC',fmtDur(totalMin(picF)),picF.length+' Flüge','sun','var(--success)',200],['IFR',fmtDur(totalMin(ifrF)),ifrF.length+' Flüge','cloud','var(--warning)',250]];const grid=h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px',marginBottom:'16px'}});stats.forEach(([l,v,u,i,c,d])=>{const card=h('div',{className:'card stat-card fade-up',style:{animationDelay:d+'ms',cursor:'default'}});card.innerHTML=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><div style="width:32px;height:32px;border-radius:8px;background:${c}18;display:flex;align-items:center;justify-content:center">${ic(i,16,c)}</div><span style="font-size:11px;color:var(--text3);font-family:var(--mono)">${l}</span></div><div class="value" style="color:${c}">${v}</div>${u?`<div class="unit">${u}</div>`:''}`;grid.append(card)});w.append(grid);const ac=h('div',{className:'card fade-up',style:{animationDelay:'300ms',cursor:'default'}});let ah='<div style="font-size:13px;font-weight:600;margin-bottom:12px;color:var(--text2)">Stunden nach Muster</div>';Object.entries(acs).sort((a,b)=>b[1]-a[1]).forEach(([t,m])=>{ah+=`<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:13px;font-family:var(--mono);font-weight:600">${t}</span><span style="font-size:12px;font-family:var(--mono);color:var(--text2)">${fmtDur(m)}</span></div><div class="mini-bar"><div class="mini-bar-fill" style="width:${Math.min(100,(m/mx)*100)}%;background:var(--accent)"></div></div></div>`});ac.innerHTML=ah;w.append(ac);p.append(w);}
+
+/* AI */
+function renderAI(p){const cs=h('div',{className:'chat-scroll',style:{flex:'1',overflow:'auto',padding:'20px',display:'flex',flexDirection:'column',gap:'10px'}});S.chatMessages.forEach((m,i)=>{const r=h('div',{className:'fade-up',style:{display:'flex',justifyContent:m.role==='user'?'flex-end':'flex-start',animationDelay:i*20+'ms'}});const b=h('div',{className:'chat-msg '+(m.role==='user'?'user':'ai')});b.textContent=m.text;r.append(b);cs.append(r)});if(S.chatLoading){const d=h('div',{className:'chat-dots fade-up'});d.innerHTML='<div></div><div></div><div></div>';cs.append(d)}if(S.chatMessages.length<=1&&!S.chatLoading){const ch=h('div',{style:{display:'flex',flexWrap:'wrap',gap:'8px',marginTop:'8px'}});['Wie viele PIC-Stunden?','Analysiere meine Flüge','IFR Tipps','EASA Nachtflug'].forEach(s=>{ch.append(h('button',{className:'suggestion-chip',onClick:()=>{S.chatInput=s;render();setTimeout(()=>{const i=$('#ci');if(i){i.value=s;i.focus()}},50)}},s))});cs.append(ch)}const bar=h('div',{style:{padding:'12px 20px',borderTop:'1px solid var(--border)',display:'flex',gap:'10px',flexShrink:'0'}});const inp=h('input',{id:'ci',placeholder:'Frage deinen KI-Copiloten...',value:S.chatInput});inp.addEventListener('input',e=>{S.chatInput=e.target.value});inp.addEventListener('keydown',e=>{if(e.key==='Enter')doChat()});const btn=h('button',{className:'btn btn-primary',style:{padding:'10px 16px'},onClick:doChat});btn.innerHTML=ic('send',16,'#fff');if(S.chatLoading||!S.chatInput.trim())btn.disabled=true;bar.append(inp,btn);p.style.display='flex';p.style.flexDirection='column';p.append(cs,bar);}
+async function doChat(){if(!S.chatInput.trim()||S.chatLoading)return;if(!S.apiKey){S.chatMessages.push({role:'user',text:S.chatInput},{role:'ai',text:`⚠️ ${PROVIDERS[S.provider].name} API Key in Settings eingeben.`});S.chatInput='';render();return}const msg=S.chatInput.trim();S.chatInput='';S.chatMessages.push({role:'user',text:msg});S.chatLoading=true;render();const fl=S.flights,sum=fl.slice(0,20).map(f=>`${f.date}: ${f.departure.icao}→${f.arrival.icao}, ${f.aircraft} ${f.registration}, ${fmtDur(f.durationMin)}h, ${f.pic?'PIC':'SIC'}, ${f.ifr?'IFR':'VFR'}, ${f.night?'Night':'Day'}, ${f.landings} LDG`).join('\n');const sys=`Du bist ein erfahrener Flugassistent. Deutsch, präzise.\nFLUGBUCH: ${fl.length} Flüge, ${fmtDur(totalMin(fl))} Gesamtzeit, Homebase: ${S.homebase}\nFlugzeuge: ${S.aircraft.map(a=>a.type+' '+a.reg).join(', ')}\nFlüge:\n${sum}\n\nFrage: ${msg}`;try{const t=S.provider==='gemini'?await gCall(sys):await cCall(sys,msg);S.chatMessages.push({role:'ai',text:t})}catch(e){S.chatMessages.push({role:'ai',text:`❌ ${e.message}`})}S.chatLoading=false;render();}
+async function gCall(p){const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${PROVIDERS.gemini.model}:generateContent?key=${S.apiKey}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{role:'user',parts:[{text:p}]}],generationConfig:{temperature:.7,maxOutputTokens:1024}})});if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e?.error?.message||`Gemini ${r.status}`)}const d=await r.json();return d?.candidates?.[0]?.content?.parts?.[0]?.text||'Keine Antwort.';}
+async function cCall(sys,msg){const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':S.apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:PROVIDERS.claude.model,max_tokens:1024,system:sys,messages:[{role:'user',content:msg}]})});if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e?.error?.message||`Claude ${r.status}`)}const d=await r.json();return d?.content?.[0]?.text||'Keine Antwort.';}
+
+/* Settings */
+function renderCfg(p){const w=h('div',{style:{padding:'20px'}}),prov=PROVIDERS[S.provider],pc=S.provider==='gemini'?'var(--gemini)':'var(--claude)';
+  const p1=h('div',{className:'card fade-up',style:{cursor:'default'}});p1.innerHTML=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">${ic('ai',20,pc)}<span style="font-size:15px;font-weight:600">KI-Provider</span></div>`;p1.append(provToggle(S.provider,p=>{saveProv(p);S.keyInput='';S.apiKey='';saveK('');S.chatMessages=[wMsg()];render()}));w.append(p1);
+  const kc=h('div',{className:'card fade-up',style:{cursor:'default',animationDelay:'50ms'}});kc.innerHTML=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">${ic('key',20,pc)}<span style="font-size:15px;font-weight:600">${prov.name} API Key</span></div><p style="font-size:13px;color:var(--text2);margin-bottom:12px">Key: <a href="${prov.link}" target="_blank" style="color:${pc}">${prov.linkLabel}</a></p><div style="position:relative;margin-bottom:8px"><input id="ki" type="${S.showKey?'text':'password'}" value="${S.keyInput||''}" placeholder="${prov.placeholder}" style="padding-right:80px"><button id="tk" style="position:absolute;right:8px;top:8px;background:none;border:none;color:var(--text3);font-size:12px;font-family:var(--mono);cursor:pointer">${S.showKey?'Verbergen':'Anzeigen'}</button></div>${S.apiKey?'<div style="font-size:12px;color:var(--success);font-family:var(--mono)">✓ Key gespeichert</div>':''}`;w.append(kc);
+  const sb=h('button',{className:'btn btn-success',style:{width:'100%',marginBottom:'16px',marginTop:'6px'},onClick:()=>{const v=$('#ki').value.trim();saveK(v);S.keyInput=v;S.chatMessages=[wMsg()];render()}});sb.innerHTML=ic('check',16,'#fff')+' Key speichern';w.append(sb);
+  setTimeout(()=>{$('#ki')?.addEventListener('input',e=>{S.keyInput=e.target.value});$('#tk')?.addEventListener('click',()=>{S.showKey=!S.showKey;render()})},0);
+  const hc=h('div',{className:'card fade-up',style:{cursor:'default',animationDelay:'100ms'}});hc.innerHTML=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">${ic('home',20,'var(--warning)')}<span style="font-size:15px;font-weight:600">Homebase</span></div>`;const hs=h('select');AP.forEach(a=>{const o=h('option',{value:a.icao},`${a.icao} – ${a.name}`);if(a.icao===S.homebase)o.selected=true;hs.append(o)});hs.addEventListener('change',e=>{saveHB(e.target.value);render()});hc.append(hs);w.append(hc);
+  const ac=h('div',{className:'card fade-up',style:{cursor:'default',animationDelay:'150ms'}});ac.innerHTML=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">${ic('plane',20,'var(--accent)')}<span style="font-size:15px;font-weight:600">Flugzeuge</span></div>`;S.aircraft.forEach((a,i)=>{const row=h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:'1px solid var(--border)'}});row.innerHTML=`<div><span style="font-family:var(--mono);font-weight:600">${a.type}</span><span style="font-size:12px;color:var(--text3);margin-left:8px">${a.reg}</span></div>`;const btns=h('div',{style:{display:'flex',gap:'6px'}});btns.append(h('button',{style:{background:'none',border:'none',color:'var(--text3)',padding:'4px'},onClick:()=>{S.editAC=i;render()},innerHTML:ic('edit',16,'var(--text2)')}),h('button',{style:{background:'none',border:'none',padding:'4px'},onClick:()=>{if(confirm(`${a.type} ${a.reg} löschen?`)){S.aircraft.splice(i,1);saveAC();render()}},innerHTML:ic('trash',16,'var(--danger)')}));row.append(btns);ac.append(row)});ac.append(h('button',{className:'btn btn-ghost',style:{width:'100%',marginTop:'10px',fontSize:'13px'},onClick:()=>{S.editAC=-1;render()},innerHTML:ic('plus',14,'var(--text2)')+' Flugzeug hinzufügen'}));w.append(ac);
+  const ec=h('div',{className:'card fade-up',style:{animationDelay:'200ms',cursor:'default'}});ec.innerHTML=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">${ic('exp',20,'var(--success)')}<span style="font-size:15px;font-weight:600">Export / Import</span></div><p style="font-size:13px;color:var(--text2);margin-bottom:12px">${S.flights.length} Flüge</p>`;const br=h('div',{style:{display:'flex',gap:'8px'}});br.append(h('button',{className:'btn btn-ghost',style:{flex:'1',fontSize:'12px'},onClick:exCSV,innerHTML:'CSV'}),h('button',{className:'btn btn-ghost',style:{flex:'1',fontSize:'12px'},onClick:exJSON,innerHTML:'JSON'}),h('button',{className:'btn btn-ghost',style:{flex:'1',fontSize:'12px'},onClick:imJSON,innerHTML:'Import'}));ec.append(br);w.append(ec);
+  w.append(h('button',{className:'btn btn-danger fade-up',style:{width:'100%',opacity:'.7',marginTop:'8px',animationDelay:'250ms'},onClick:()=>{if(confirm('Alle Flüge löschen?')){S.flights=[];saveF();render()}},innerHTML:ic('trash',15,'#fff')+' Alle Flüge löschen'}));
+  p.append(w);}
+
+/* AC Editor */
+function renderACEd(app){const isNew=S.editAC===-1;const ac=isNew?{type:'',reg:''}:{...S.aircraft[S.editAC]};const ov=h('div',{className:'modal-overlay scale-in',onClick:e=>{if(e.target===e.currentTarget){S.editAC=null;render()}}});const modal=h('div',{className:'modal'});modal.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><span style="font-size:18px;font-weight:700">${isNew?'Neues Flugzeug':'Flugzeug bearbeiten'}</span><button id="cl-ac" style="background:none;border:none;cursor:pointer;color:var(--text3)">${ic('x',22,'var(--text3)')}</button></div><div class="grid2"><div class="field"><label>MUSTER</label><input id="ac-t" placeholder="C172, DA40..." value="${ac.type}"></div><div class="field"><label>KENNUNG</label><input id="ac-r" placeholder="D-EABC" value="${ac.reg}"></div></div>`;modal.append(h('button',{className:'btn btn-primary',style:{width:'100%',marginTop:'8px'},onClick:()=>{const t=$('#ac-t').value.trim(),r=$('#ac-r').value.trim();if(!t||!r){alert('Muster und Kennung eingeben');return}if(isNew)S.aircraft.push({type:t,reg:r});else S.aircraft[S.editAC]={type:t,reg:r};saveAC();S.editAC=null;render()},innerHTML:ic('check',16,'#fff')+' Speichern'}));ov.append(modal);app.append(ov);setTimeout(()=>{$('#cl-ac')?.addEventListener('click',()=>{S.editAC=null;render()})},0);}
+
+/* Flight Editor */
+function renderEditor(app){const f=S.editing,isNew=!S.flights.find(x=>x.id===f.id);const ov=h('div',{className:'modal-overlay scale-in',onClick:e=>{if(e.target===e.currentTarget){S.editing=null;render()}}});const modal=h('div',{className:'modal'});const acOpts=S.aircraft.map(a=>`<option value="${a.type}|||${a.reg}"${a.type===f.aircraft&&a.reg===f.registration?' selected':''}>${a.type} — ${a.reg}</option>`).join('');modal.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><span style="font-size:18px;font-weight:700">${isNew?'Neuer Flug':'Flug bearbeiten'}</span><button id="cl-ed" style="background:none;border:none;cursor:pointer;color:var(--text3)">${ic('x',22,'var(--text3)')}</button></div><div class="grid2"><div class="field"><label>DATUM</label><input type="date" id="ed-dt" value="${f.date}"></div><div class="field"><label>FLUGZEUG</label><select id="ed-ac">${acOpts}<option value="__custom"${!S.aircraft.find(a=>a.type===f.aircraft&&a.reg===f.registration)?' selected':''}>Manuell...</option></select></div></div><div class="grid2" id="cust-ac" style="display:${S.aircraft.find(a=>a.type===f.aircraft&&a.reg===f.registration)?'none':'grid'}"><div class="field"><label>MUSTER</label><input id="ed-at" value="${f.aircraft}"></div><div class="field"><label>KENNUNG</label><input id="ed-ar" value="${f.registration}"></div></div><div class="field"><label>LANDUNGEN</label><input type="number" min="0" id="ed-ldg" value="${f.landings}"></div><div class="grid2"><div class="field"><label>ABFLUG</label><select id="ed-dep">${AP.map(a=>`<option value="${a.icao}"${a.icao===f.departure.icao?' selected':''}>${a.icao} – ${a.name}</option>`).join('')}</select></div><div class="field"><label>ANKUNFT</label><select id="ed-arr">${AP.map(a=>`<option value="${a.icao}"${a.icao===f.arrival.icao?' selected':''}>${a.icao} – ${a.name}</option>`).join('')}</select></div><div class="field"><label>BLOCK OFF</label><input type="time" id="ed-off" value="${f.blockOff}"></div><div class="field"><label>BLOCK ON</label><input type="time" id="ed-on" value="${f.blockOn}"></div></div><div style="display:flex;gap:16px;margin:12px 0 16px"><label class="checkbox"><div class="box${f.pic?' checked':''}" id="cb-pic">${f.pic?ic('check',14,'#fff',3):''}</div>PIC</label><label class="checkbox"><div class="box${f.ifr?' checked':''}" id="cb-ifr">${f.ifr?ic('check',14,'#fff',3):''}</div>IFR</label><label class="checkbox"><div class="box${f.night?' checked':''}" id="cb-night">${f.night?ic('check',14,'#fff',3):''}</div>NIGHT</label></div><div class="field"><label>BEMERKUNGEN</label><textarea id="ed-rem" rows="2" style="resize:vertical;font-family:var(--mono);font-size:12px">${f.remarks||''}</textarea></div>`;const br=h('div',{style:{display:'flex',gap:'10px',marginTop:'8px'}});br.append(h('button',{className:'btn btn-primary',style:{flex:'1'},onClick:saveFL,innerHTML:ic('check',16,'#fff')+' Speichern'}));if(!isNew)br.append(h('button',{className:'btn btn-danger',style:{padding:'10px 14px'},onClick:()=>{S.flights=S.flights.filter(x=>x.id!==f.id);saveF();S.editing=null;render()},innerHTML:ic('trash',16,'#fff')}));modal.append(br);ov.append(modal);app.append(ov);setTimeout(()=>{$('#cl-ed')?.addEventListener('click',()=>{S.editing=null;render()});['pic','ifr','night'].forEach(k=>{$(`#cb-${k}`)?.addEventListener('click',()=>{S.editing[k]=!S.editing[k];render()})});$('#ed-ac')?.addEventListener('change',e=>{$('#cust-ac').style.display=e.target.value==='__custom'?'grid':'none';if(e.target.value!=='__custom'){const[t,r]=e.target.value.split('|||');$('#ed-at').value=t;$('#ed-ar').value=r}})},0);}
+function saveFL(){const f=S.editing;f.date=$('#ed-dt').value;const sel=$('#ed-ac').value;if(sel!=='__custom'){const[t,r]=sel.split('|||');f.aircraft=t;f.registration=r}else{f.aircraft=$('#ed-at').value;f.registration=$('#ed-ar').value}f.landings=parseInt($('#ed-ldg').value)||0;f.departure=apByIcao($('#ed-dep').value);f.arrival=apByIcao($('#ed-arr').value);f.blockOff=$('#ed-off').value;f.blockOn=$('#ed-on').value;f.remarks=$('#ed-rem').value;const[h1,m1]=f.blockOff.split(':').map(Number),[h2,m2]=f.blockOn.split(':').map(Number);let d=(h2*60+m2)-(h1*60+m1);if(d<0)d+=1440;f.durationMin=d;const i=S.flights.findIndex(x=>x.id===f.id);if(i>=0)S.flights[i]=f;else S.flights.unshift(f);S.flights.sort((a,b)=>b.date.localeCompare(a.date));saveF();S.editing=null;render();}
+
+/* Export */
+function exCSV(){const hdr='Datum,Abflug,Ankunft,Muster,Kennung,Off,On,Min,LDG,PIC,IFR,Night,Remarks';const rows=S.flights.map(f=>`${f.date},${f.departure.icao},${f.arrival.icao},${f.aircraft},${f.registration},${f.blockOff},${f.blockOn},${f.durationMin},${f.landings},${f.pic},${f.ifr},${f.night},"${f.remarks}"`);dl([hdr,...rows].join('\n'),'text/csv',`logviz_${new Date().toISOString().slice(0,10)}.csv`)}
+function exJSON(){dl(JSON.stringify({flights:S.flights,aircraft:S.aircraft,homebase:S.homebase},null,2),'application/json',`logviz_${new Date().toISOString().slice(0,10)}.json`)}
+function imJSON(){const i=document.createElement('input');i.type='file';i.accept='.json';i.addEventListener('change',async()=>{try{const t=await i.files[0].text();const d=JSON.parse(t);if(d.flights){S.flights=d.flights;saveF();if(d.aircraft){S.aircraft=d.aircraft;saveAC()}if(d.homebase){saveHB(d.homebase);S.homebase=d.homebase}render();alert(`${d.flights.length} Flüge importiert!`)}else if(Array.isArray(d)){S.flights=d;saveF();render();alert(`${d.length} Flüge importiert!`)}}catch(e){alert('Fehler: '+e.message)}});i.click()}
+function dl(c,t,n){const b=new Blob([c],{type:t});const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download=n;a.click();URL.revokeObjectURL(u)}
+
+load();render();
+</script>
+</body>
+</html>
